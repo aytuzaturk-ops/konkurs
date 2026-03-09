@@ -1,3 +1,4 @@
+from aiogram.types import WebAppInfo
 from aiogram import Router, Bot, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import CommandStart
@@ -13,6 +14,7 @@ def main_keyboard():
         keyboard=[
             [KeyboardButton(text="📊 Statistika"), KeyboardButton(text="🏆 Top 100")],
             [KeyboardButton(text="👥 Do'stlarim"), KeyboardButton(text="🔗 Referal link")],
+            [KeyboardButton(text="🌐 Web App", web_app=WebAppInfo(url="https://yourusername.github.io/konkurs-webapp"))],
         ],
         resize_keyboard=True
     )
