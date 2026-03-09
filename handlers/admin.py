@@ -36,21 +36,116 @@ def admin_only(func):
     return wrapper
 
 # ===== ADMIN PANEL =====
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton  # import qo'shing
+
 def admin_panel_kb():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📢 Kanallar boshqaruvi", callback_data="admin_channels")],
-        [InlineKeyboardButton(text="👥 Foydalanuvchilar", callback_data="admin_users")],
-        [InlineKeyboardButton(text="📣 Xabar yuborish", callback_data="admin_broadcast")],
-        [InlineKeyboardButton(text="🏆 Konkurs boshqaruvi", callback_data="admin_contest")],
-        [InlineKeyboardButton(text="📊 Statistika", callback_data="admin_stats")],
-    ])
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="📢 Kanallar"), KeyboardButton(text="👥 Foydalanuvchilar")],
+            [KeyboardButton(text="📣 Xabar yuborish"), KeyboardButton(text="🏆 Konkurs")],
+            [KeyboardButton(text="📊 Statistika"), KeyboardButton(text="❌ Panelni yopish")],
+        ],
+        resize_keyboard=True
+    )
 
 @router.message(Command("admin"))
 async def admin_panel(message: Message):
     if not is_admin(message.from_user.id):
         await message.answer("❌ Sizda admin huquqi yo'q!")
         return
-    await message.answer("🛠 <b>Admin Panel</b>\n\nNimani boshqarmoqchisiz?", reply_markup=admin_panel_kb(), parse_mode="HTML")
+    await message.answer("🛠 <b>Admin Panel</b>", reply_markup=admin_panel_kb(), parse_mode="HTML")
+
+@router.message(F.text == "📢 Kanallar")
+async def btn_channels(message: Message):
+    if not is_admin(message.from_user.id): return
+    # admin_channels callback ni chaqirish o'rniga matn yuborish
+    channels = await db.get_channels()
+    text = "📢 <b>Kanallar boshqaruvi</b>\n\n"
+    if channels:
+        for ch in channels:
+            text += f"• {ch['channel_name']} ({ch['channel_id']})\n"
+    else:
+        text += "Hozircha kanallar yo'q.\n"
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="➕ Kanal qo'shish", callback_data="add_channel")],
+        [InlineKeyboardButton(text="🗑 Kanal o'chirish", callback_data="remove_channel")],
+    ])
+    await message.answer(text, reply_markup=kb, parse_mode="HTML")
+
+@router.message(F.text == "👥 Foydalanuvchilar")
+async def btn_users(message: Message):
+    if not is_admin(message.from_user.id): return
+    all_users = await db.get_all_users()
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=f"📋 Barcha ({len(all_users)} ta)", callback_data="list_all_users")],
+        [InlineKeyboardButton(text="🔍 ID bo'yicha qidirish", callback_data="search_user")],
+    ])
+    await message.answer(f"👥 <b>Foydalanuvchilar</b>\n\nJami: <b>{len(all_users)}</b>", reply_markup=kb, parse_mode="HTML")
+
+@router.message(F.text == "📣 Xabar yuborish")
+async def btn_broadcast(message: Message, state: FSMContext):
+    if not is_admin(message.from_user.id): return
+    await message.answer("📣 Yubormoqchi bo'lgan xabarni yuboring:\n\nBekor qilish: /cancel")
+    await state.set_state(AdminStates.broadcasting)
+
+@router.message(F.text == "🏆 Konkurs")
+async def btn_contest(message: Message):
+    if not is_admin(message.from_user.id): return
+    is_active = await db.get_contest_status()
+    status_text = "🟢 Faol" if is_active else "🔴 To'xtatilgan"
+    toggle_text = "⏹ To'xtatish" if is_active else "▶️ Boshlash"
+    toggle_data = "stop_contest" if is_active else "start_contest"
+    deadline_str = await db.get_deadline()
+    deadline_text = f"⏰ Muddat: {deadline_str[:16] if deadline_str else 'Belgilanmagan'}"
+    all_users = await db.get_all_users()
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=toggle_text, callback_data=toggle_data)],
+        [InlineKeyboardButton(text="⏰ Muddat belgilash", callback_data="set_deadline")],
+        [InlineKeyboardButton(text="🏆 G'oliblarni e'lon qilish", callback_data="announce_winners")],
+        [InlineKeyboardButton(text="🗑 Bazani tozalash", callback_data="reset_contest")],
+    ])
+    await message.answer(
+        f"🏆 <b>Konkurs boshqaruvi</b>\n\n"
+        f"📊 Holat: {status_text}\n"
+        f"{deadline_text}\n"
+        f"👥 Ishtirokchilar: {len(all_users)} ta",
+        reply_markup=kb, parse_mode="HTML"
+    )
+
+@router.message(F.text == "📊 Statistika")
+async def btn_stats(message: Message):
+    if not is_admin(message.from_user.id): return
+    all_users = await db.get_all_users()
+    today_count = await db.get_today_users_count()
+    total_referrals = await db.get_total_referrals_count()
+    top_referrers = await db.get_top_referrers(5)
+    is_active = await db.get_contest_status()
+    deadline_str = await db.get_deadline()
+    lines = [
+        "📊 <b>Konkurs statistikasi</b>\n",
+        f"👥 Jami ishtirokchilar: <b>{len(all_users)}</b>",
+        f"🆕 Bugun qo'shilgan: <b>{today_count}</b>",
+        f"🔗 Jami referallar: <b>{total_referrals}</b>",
+        f"🏆 Holat: {'🟢 Faol' if is_active else '🔴 Toʻxtatilgan'}",
+    ]
+    if deadline_str:
+        deadline = datetime.fromisoformat(deadline_str)
+        now = datetime.now()
+        diff = deadline - now
+        if diff.total_seconds() > 0:
+            lines.append(f"⏰ Tugashiga: <b>{diff.days} kun {diff.seconds//3600} soat</b>")
+    if top_referrers:
+        lines.append("\n🔝 <b>Eng faol taklif qiluvchilar:</b>")
+        for i, u in enumerate(top_referrers, 1):
+            name = u["full_name"] or u["username"] or "Nomsiz"
+            lines.append(f"{i}. {name} — {u['ref_count']} referal")
+    await message.answer("\n".join(lines), parse_mode="HTML")
+
+@router.message(F.text == "❌ Panelni yopish")
+async def btn_close(message: Message):
+    if not is_admin(message.from_user.id): return
+    from aiogram.types import ReplyKeyboardRemove
+    await message.answer("✅ Admin panel yopildi.", reply_markup=ReplyKeyboardRemove())
 
 # ===== CHANNEL MANAGEMENT =====
 @router.callback_query(F.data == "admin_channels")
