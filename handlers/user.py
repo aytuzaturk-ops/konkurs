@@ -1,10 +1,12 @@
 from aiogram import Router, Bot, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import CommandStart
+from datetime import datetime
 
 import database as db
 
 router = Router()
+
 
 async def check_subscriptions(bot: Bot, user_id: int):
     channels = await db.get_channels()
@@ -18,6 +20,7 @@ async def check_subscriptions(bot: Bot, user_id: int):
             not_subscribed.append(channel)
     return len(not_subscribed) == 0, not_subscribed
 
+
 async def subscription_keyboard(channels):
     buttons = []
     for ch in channels:
@@ -25,13 +28,13 @@ async def subscription_keyboard(channels):
     buttons.append([InlineKeyboardButton(text="✅ A'zo bo'ldim", callback_data="check_subscription")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
+
 @router.message(CommandStart())
 async def cmd_start(message: Message, bot: Bot):
     user_id = message.from_user.id
     username = message.from_user.username or ""
     full_name = message.from_user.full_name
 
-    # Referral tekshirish
     referrer_id = None
     args = message.text.split()
     if len(args) > 1:
@@ -44,7 +47,6 @@ async def cmd_start(message: Message, bot: Bot):
         except ValueError:
             pass
 
-    # Kanallar bor-yo'qligini tekshirish
     channels = await db.get_channels()
     if not channels:
         await message.answer(
@@ -53,15 +55,13 @@ async def cmd_start(message: Message, bot: Bot):
         )
         return
 
-    # Obuna tekshirish
     all_subscribed, not_subscribed = await check_subscriptions(bot, user_id)
 
     if not all_subscribed:
-        # Foydalanuvchini saqlab qo'yamiz (referrer bilan)
         existing_user = await db.get_user(user_id)
         if not existing_user:
             await db.create_user(user_id, username, full_name, referrer_id)
-        
+
         kb = await subscription_keyboard(not_subscribed)
         await message.answer(
             "👋 <b>Xush kelibsiz!</b>\n\n"
@@ -72,24 +72,11 @@ async def cmd_start(message: Message, bot: Bot):
         )
         return
 
-    # Obuna bo'lgan — konkurs tekshirish
     existing_user = await db.get_user(user_id)
     if not existing_user:
         await db.create_user(user_id, username, full_name, referrer_id)
-        existing_user = None  # yangi foydalanuvchi
+        existing_user = None
 
-    contest_active = await db.get_contest_status()
-    if not contest_active:
-        await message.answer(
-            "✅ <b>Kanallarga a'zo bo'lgansiz!</b>\n\n"
-            "⏳ Konkurs hali boshlanmagan. Tez orada e'lon qilinadi!",
-            parse_mode="HTML"
-        )
-        return
-
-    await process_verified_user(message, bot, user_id, referrer_id, existing_user)
-
-    # Konkurs holati
     contest_active = await db.get_contest_status()
     if not contest_active:
         await message.answer(
@@ -154,11 +141,19 @@ async def process_verified_user(message, bot: Bot, user_id: int, referrer_id, ex
         except Exception:
             pass
 
+    # Deadline ma'lumoti
+    deadline_str = await db.get_deadline()
+    deadline_text = ""
+    if deadline_str:
+        deadline = datetime.fromisoformat(deadline_str)
+        deadline_text = f"\n⏰ <b>Konkurs tugashi:</b> {deadline.strftime('%d.%m.%Y %H:%M')}\n"
+
     text = (
         f"🎉 <b>Tabriklaymiz! Siz ro'yxatdan o'tdingiz!</b>\n\n"
         f"🆔 <b>Sizning ID:</b> <code>{user_id}</code>\n"
         f"⭐ <b>Ballar:</b> {user['points'] if user else 0}\n"
-        f"👥 <b>Taklif qilganlar:</b> {len(referrals)} kishi\n\n"
+        f"👥 <b>Taklif qilganlar:</b> {len(referrals)} kishi\n"
+        f"{deadline_text}\n"
         f"🔗 <b>Sizning referal havolangiz:</b>\n"
         f"<code>{ref_link}</code>\n\n"
         f"👆 Havolani do'stlaringizga yuboring va har bir yangi a'zo uchun <b>+1 ball</b> oling!"
@@ -167,6 +162,7 @@ async def process_verified_user(message, bot: Bot, user_id: int, referrer_id, ex
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📊 Statistika", callback_data="my_stats")],
         [InlineKeyboardButton(text="👥 Do'stlarim ro'yxati", callback_data="my_referrals")],
+        [InlineKeyboardButton(text="🏆 Top 100 reyting", callback_data="top_100")],
     ])
 
     if send_new:
@@ -185,16 +181,30 @@ async def my_stats(callback: CallbackQuery, bot: Bot):
     bot_info = await bot.get_me()
     ref_link = f"https://t.me/{bot_info.username}?start=ref_{user_id}"
 
+    deadline_str = await db.get_deadline()
+    deadline_text = ""
+    if deadline_str:
+        deadline = datetime.fromisoformat(deadline_str)
+        now = datetime.now()
+        diff = deadline - now
+        if diff.total_seconds() > 0:
+            days = diff.days
+            hours = diff.seconds // 3600
+            deadline_text = f"\n⏰ Tugashiga: <b>{days} kun {hours} soat</b> qoldi\n"
+
     text = (
         f"📊 <b>Sizning statistikangiz</b>\n\n"
         f"🆔 ID: <code>{user_id}</code>\n"
         f"⭐ Ballar: <b>{user['points']}</b>\n"
         f"👥 Referal soni: <b>{len(referrals)}</b>\n"
-        f"🏆 Reyting: <b>{rank}-o'rin</b>\n\n"
+        f"🏆 Reyting: <b>{rank}-o'rin</b> ({len(all_users)} ta ichida)\n"
+        f"{deadline_text}\n"
         f"🔗 Referal link:\n<code>{ref_link}</code>"
     )
+
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="« Orqaga", callback_data="back_main")]
+        [InlineKeyboardButton(text="🏆 Top 100", callback_data="top_100")],
+        [InlineKeyboardButton(text="« Orqaga", callback_data="back_main")],
     ])
     await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
     await callback.answer()
@@ -221,6 +231,43 @@ async def my_referrals(callback: CallbackQuery):
     await callback.answer()
 
 
+@router.callback_query(F.data == "top_100")
+async def top_100(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    top_users = await db.get_top_users(100)
+    all_users = await db.get_all_users()
+    user_rank = next((i + 1 for i, u in enumerate(all_users) if u["telegram_id"] == user_id), None)
+
+    medals = {1: "🥇", 2: "🥈", 3: "🥉"}
+    lines = [f"🏆 <b>Top {min(100, len(top_users))} Reyting</b>\n"]
+
+    for i, u in enumerate(top_users, 1):
+        name = u["full_name"] or u["username"] or "Nomsiz"
+        # Ismni 20 ta belgiga cheklash
+        if len(name) > 20:
+            name = name[:18] + ".."
+        medal = medals.get(i, f"{i}.")
+        # O'zini belgilash
+        marker = " ◀️" if u["telegram_id"] == user_id else ""
+        lines.append(f"{medal} {name} — {u['points']} ball{marker}")
+
+    if user_rank and user_rank > 100:
+        lines.append(f"\n...\n🔸 Sizning o'rningiz: {user_rank}-o'rin")
+
+    text = "\n".join(lines)
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="« Orqaga", callback_data="back_main")]
+    ])
+
+    # Xabar uzun bo'lishi mumkin, edit_text ishlamasligi mumkin
+    try:
+        await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+    except Exception:
+        await callback.message.answer(text, reply_markup=kb, parse_mode="HTML")
+    await callback.answer()
+
+
 @router.callback_query(F.data == "back_main")
 async def back_main(callback: CallbackQuery, bot: Bot):
     user_id = callback.from_user.id
@@ -229,16 +276,25 @@ async def back_main(callback: CallbackQuery, bot: Bot):
     bot_info = await bot.get_me()
     ref_link = f"https://t.me/{bot_info.username}?start=ref_{user_id}"
 
+    deadline_str = await db.get_deadline()
+    deadline_text = ""
+    if deadline_str:
+        deadline = datetime.fromisoformat(deadline_str)
+        deadline_text = f"\n⏰ <b>Tugashi:</b> {deadline.strftime('%d.%m.%Y %H:%M')}\n"
+
     text = (
         f"🏠 <b>Bosh sahifa</b>\n\n"
         f"🆔 ID: <code>{user_id}</code>\n"
         f"⭐ Ballar: <b>{user['points'] if user else 0}</b>\n"
-        f"👥 Referal soni: <b>{len(referrals)}</b>\n\n"
+        f"👥 Referal soni: <b>{len(referrals)}</b>\n"
+        f"{deadline_text}\n"
         f"🔗 Referal link:\n<code>{ref_link}</code>"
     )
+
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📊 Statistika", callback_data="my_stats")],
         [InlineKeyboardButton(text="👥 Do'stlarim ro'yxati", callback_data="my_referrals")],
+        [InlineKeyboardButton(text="🏆 Top 100 reyting", callback_data="top_100")],
     ])
     await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
     await callback.answer()
