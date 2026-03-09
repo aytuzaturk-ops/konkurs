@@ -376,43 +376,30 @@ async def stop_contest(callback: CallbackQuery):
     await admin_contest(callback)
 
 @router.callback_query(F.data == "announce_winners")
-async def announce_winners(callback: CallbackQuery, bot: Bot):
+async def announce_winners(callback: CallbackQuery, bot: Bot, state: FSMContext):
     if not is_admin(callback.from_user.id):
         return
-    
-    top_users = await db.get_top_users(10)
-    
+
+    top_users = await db.get_top_users(100)
+
     if not top_users:
         await callback.answer("❌ Ishtirokchilar yo'q!", show_alert=True)
         return
-    
-    medals = ["🥇", "🥈", "🥉"] + ["🏅"] * 7
-    lines = ["🏆 <b>KONKURS NATIJALARI</b> 🏆\n"]
-    for i, u in enumerate(top_users):
-        name = u["full_name"] or u["username"] or "Nomsiz"
-        lines.append(f"{medals[i]} {i+1}-o'rin: <b>{name}</b> — {u['points']} ball")
-    
-    announcement = "\n".join(lines)
-    
-    # Barcha foydalanuvchilarga yuborish
-    all_users = await db.get_all_users()
-    sent = 0
-    for user in all_users:
-        try:
-            await bot.send_message(user["telegram_id"], announcement, parse_mode="HTML")
-            sent += 1
-        except Exception:
-            pass
-    
-    await callback.answer(f"✅ {sent} ta foydalanuvchiga yuborildi!", show_alert=True)
-    await callback.message.edit_text(
-        announcement + f"\n\n<i>📤 {sent} ta foydalanuvchiga yuborildi</i>",
-        parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="« Orqaga", callback_data="admin_contest")]
-        ])
-    )
 
+    if len(top_users) < 3:
+        await callback.answer("❌ Kamida 3 ta ishtirokchi kerak!", show_alert=True)
+        return
+
+    await callback.message.edit_text(
+        "🏆 <b>G'oliblarni aniqlash</b>\n\n"
+        "Random sovg'alar uchun nechta ishtirokchi tanlansin?\n"
+        "(1, 2, 3-o'rinlar bundan tashqari)\n\n"
+        "Sonni kiriting:",
+        parse_mode="HTML"
+    )
+    await state.set_state(AdminStates.editing_user_points)  
+    await state.update_data(action="random_winners", top_users=[dict(u) for u in top_users])
+    await callback.answer()
 @router.callback_query(F.data == "reset_contest")
 async def reset_contest_confirm(callback: CallbackQuery):
     if not is_admin(callback.from_user.id):
