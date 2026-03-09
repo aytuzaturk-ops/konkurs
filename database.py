@@ -79,7 +79,6 @@ async def get_top_users(limit: int = 10):
 async def reset_all_data():
     async with aiosqlite.connect(DATABASE_URL) as db:
         await db.execute("DELETE FROM users")
-        await db.execute("DELETE FROM sqlite_sequence WHERE name='users'")
         await db.commit()
 
 # ========== CHANNEL FUNCTIONS ==========
