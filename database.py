@@ -25,14 +25,16 @@ async def init_db():
         await db.execute("""
             CREATE TABLE IF NOT EXISTS contest_settings (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
-                is_active INTEGER DEFAULT 0
+                is_active INTEGER DEFAULT 0,
+                deadline TEXT DEFAULT NULL
             )
         """)
-        # Default contest settings
         await db.execute("INSERT OR IGNORE INTO contest_settings (id, is_active) VALUES (1, 0)")
+        try:
+            await db.execute("ALTER TABLE contest_settings ADD COLUMN deadline TEXT DEFAULT NULL")
+        except Exception:
+            pass
         await db.commit()
-
-# ========== USER FUNCTIONS ==========
 
 async def get_user(telegram_id: int):
     async with aiosqlite.connect(DATABASE_URL) as db:
@@ -70,7 +72,7 @@ async def get_user_referrals(telegram_id: int):
         async with db.execute("SELECT * FROM users WHERE referrer_id = ?", (telegram_id,)) as cursor:
             return await cursor.fetchall()
 
-async def get_top_users(limit: int = 10):
+async def get_top_users(limit: int = 100):
     async with aiosqlite.connect(DATABASE_URL) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute("SELECT * FROM users ORDER BY points DESC LIMIT ?", (limit,)) as cursor:
@@ -79,9 +81,38 @@ async def get_top_users(limit: int = 10):
 async def reset_all_data():
     async with aiosqlite.connect(DATABASE_URL) as db:
         await db.execute("DELETE FROM users")
+        await db.execute("DELETE FROM sqlite_sequence WHERE name='users'")
         await db.commit()
 
-# ========== CHANNEL FUNCTIONS ==========
+async def get_today_users_count():
+    async with aiosqlite.connect(DATABASE_URL) as db:
+        async with db.execute(
+            "SELECT COUNT(*) FROM users WHERE DATE(joined_at) = DATE('now')"
+        ) as cursor:
+            row = await cursor.fetchone()
+            return row[0] if row else 0
+
+async def get_total_referrals_count():
+    async with aiosqlite.connect(DATABASE_URL) as db:
+        async with db.execute(
+            "SELECT COUNT(*) FROM users WHERE referrer_id IS NOT NULL"
+        ) as cursor:
+            row = await cursor.fetchone()
+            return row[0] if row else 0
+
+async def get_top_referrers(limit: int = 5):
+    async with aiosqlite.connect(DATABASE_URL) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("""
+            SELECT u.telegram_id, u.full_name, u.username, u.points,
+                   COUNT(r.id) as ref_count
+            FROM users u
+            LEFT JOIN users r ON r.referrer_id = u.telegram_id
+            GROUP BY u.telegram_id
+            ORDER BY ref_count DESC
+            LIMIT ?
+        """, (limit,)) as cursor:
+            return await cursor.fetchall()
 
 async def get_channels():
     async with aiosqlite.connect(DATABASE_URL) as db:
@@ -102,8 +133,6 @@ async def remove_channel(channel_id: str):
         await db.execute("DELETE FROM channels WHERE channel_id = ?", (channel_id,))
         await db.commit()
 
-# ========== CONTEST FUNCTIONS ==========
-
 async def get_contest_status():
     async with aiosqlite.connect(DATABASE_URL) as db:
         async with db.execute("SELECT is_active FROM contest_settings WHERE id = 1") as cursor:
@@ -113,4 +142,20 @@ async def get_contest_status():
 async def set_contest_status(is_active: bool):
     async with aiosqlite.connect(DATABASE_URL) as db:
         await db.execute("UPDATE contest_settings SET is_active = ? WHERE id = 1", (int(is_active),))
+        await db.commit()
+
+async def get_deadline():
+    async with aiosqlite.connect(DATABASE_URL) as db:
+        async with db.execute("SELECT deadline FROM contest_settings WHERE id = 1") as cursor:
+            row = await cursor.fetchone()
+            return row[0] if row else None
+
+async def set_deadline(deadline: str):
+    async with aiosqlite.connect(DATABASE_URL) as db:
+        await db.execute("UPDATE contest_settings SET deadline = ? WHERE id = 1", (deadline,))
+        await db.commit()
+
+async def clear_deadline():
+    async with aiosqlite.connect(DATABASE_URL) as db:
+        await db.execute("UPDATE contest_settings SET deadline = NULL WHERE id = 1")
         await db.commit()
