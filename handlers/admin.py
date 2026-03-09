@@ -391,15 +391,17 @@ async def announce_winners(callback: CallbackQuery, bot: Bot, state: FSMContext)
         await callback.answer("❌ Kamida 3 ta ishtirokchi kerak!", show_alert=True)
         return
 
+    await state.update_data(top_users=[dict(u) for u in top_users])
+    await state.set_state(AdminStates.random_count)
+
     await callback.message.edit_text(
         "🏆 <b>G'oliblarni aniqlash</b>\n\n"
-        "Random sovg'alar uchun nechta ishtirokchi tanlansin?\n"
-        "(1, 2, 3-o'rinlar bundan tashqari)\n\n"
+        f"Jami ishtirokchilar: <b>{len(top_users)}</b>\n"
+        f"1️⃣2️⃣3️⃣ o'rinlar kafolatlangan sovg'a oladi.\n\n"
+        "Qolganlar orasidan <b>nechta</b> random g'olib tanlansin?\n"
         "Sonni kiriting:",
         parse_mode="HTML"
     )
-    await state.set_state(AdminStates.editing_user_points)  
-    await state.update_data(action="random_winners", top_users=[dict(u) for u in top_users])
     await callback.answer()
 @router.callback_query(F.data == "reset_contest")
 async def reset_contest_confirm(callback: CallbackQuery):
@@ -459,3 +461,71 @@ async def cancel_state(message: Message, state: FSMContext):
         ]))
     else:
         await message.answer("Hech narsa bekor qilinmadi.")
+        @router.message(AdminStates.random_count)
+async def process_random_count(message: Message, state: FSMContext, bot: Bot):
+    if not is_admin(message.from_user.id):
+        return
+
+    try:
+        random_count = int(message.text.strip())
+        if random_count < 1:
+            raise ValueError
+    except ValueError:
+        await message.answer("❌ Noto'g'ri son. Musbat raqam kiriting:")
+        return
+
+    data = await state.get_data()
+    top_users = data["top_users"]
+    await state.clear()
+
+    import random
+
+    # 1, 2, 3 o'rinlar (kafolatlangan)
+    first = top_users[0]
+    second = top_users[1]
+    third = top_users[2]
+
+    # Qolgan ishtirokchilar (4-o'rindan boshlab)
+    rest = top_users[3:]
+
+    # Random tanlash
+    if random_count > len(rest):
+        random_count = len(rest)
+
+    random_winners = random.sample(rest, random_count)
+
+    medals = ["🥇", "🥈", "🥉"]
+    lines = ["🏆 <b>KONKURS NATIJALARI</b> 🏆\n"]
+    lines.append("━━━━━━━━━━━━━━━━━━━━━")
+    lines.append("🎖 <b>KAFOLATLANGAN SOVG'ALAR:</b>\n")
+
+    for i, u in enumerate([first, second, third]):
+        name = u["full_name"] or u.get("username") or "Nomsiz"
+        lines.append(f"{medals[i]} {i+1}-o'rin: <b>{name}</b> — {u['points']} ball")
+
+    lines.append("\n━━━━━━━━━━━━━━━━━━━━━")
+    lines.append(f"🎲 <b>RANDOM SOVG'ALAR ({random_count} ta):</b>\n")
+
+    for i, u in enumerate(random_winners, 1):
+        name = u["full_name"] or u.get("username") or "Nomsiz"
+        lines.append(f"🎁 {i}-random: <b>{name}</b> — {u['points']} ball")
+
+    announcement = "\n".join(lines)
+
+    # Barcha foydalanuvchilarga yuborish
+    all_users = await db.get_all_users()
+    sent = 0
+    for user in all_users:
+        try:
+            await bot.send_message(user["telegram_id"], announcement, parse_mode="HTML")
+            sent += 1
+        except Exception:
+            pass
+
+    await message.answer(
+        announcement + f"\n\n<i>📤 {sent} ta foydalanuvchiga yuborildi</i>",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="« Orqaga", callback_data="admin_contest")]
+        ])
+    )
