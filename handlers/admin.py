@@ -545,9 +545,17 @@ async def confirm_reset(callback: CallbackQuery):
 async def back_admin(callback: CallbackQuery):
     if not is_admin(callback.from_user.id):
         return
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📢 Kanallar", callback_data="admin_channels")],
+        [InlineKeyboardButton(text="👥 Foydalanuvchilar", callback_data="admin_users")],
+        [InlineKeyboardButton(text="🏆 Konkurs", callback_data="admin_contest")],
+        [InlineKeyboardButton(text="📊 Statistika", callback_data="admin_stats")],
+    ])
+    
     await callback.message.edit_text(
         "🛠 <b>Admin Panel</b>\n\nNimani boshqarmoqchisiz?",
-        reply_markup=admin_panel_kb(),
+        reply_markup=kb,
         parse_mode="HTML"
     )
     await callback.answer()
