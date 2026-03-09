@@ -1,4 +1,3 @@
-from webapp.api_server import start_api
 import asyncio
 import logging
 from datetime import datetime
@@ -59,7 +58,6 @@ async def main():
 
     dp.include_router(admin.router)
     dp.include_router(user.router)
-    await start_api(None)
 
     # Deadline checker ni parallel ishlatish
     asyncio.create_task(deadline_checker(bot))
