@@ -1,11 +1,21 @@
 from aiogram import Router, Bot, F
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import CommandStart
 from datetime import datetime
 
 import database as db
 
 router = Router()
+
+
+def main_keyboard():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="📊 Statistika"), KeyboardButton(text="🏆 Top 100")],
+            [KeyboardButton(text="👥 Do'stlarim"), KeyboardButton(text="🔗 Referal link")],
+        ],
+        resize_keyboard=True
+    )
 
 
 async def check_subscriptions(bot: Bot, user_id: int):
