@@ -3,6 +3,7 @@ from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKe
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from datetime import datetime
 
 import database as db
 from config import ADMIN_IDS
@@ -20,6 +21,7 @@ class AdminStates(StatesGroup):
     editing_user_id = State()
     broadcasting = State()
     random_count = State()
+    setting_deadline = State()
 
 def is_admin(user_id: int) -> bool:
     return user_id in ADMIN_IDS
@@ -40,6 +42,7 @@ def admin_panel_kb():
         [InlineKeyboardButton(text="👥 Foydalanuvchilar", callback_data="admin_users")],
         [InlineKeyboardButton(text="📣 Xabar yuborish", callback_data="admin_broadcast")],
         [InlineKeyboardButton(text="🏆 Konkurs boshqaruvi", callback_data="admin_contest")],
+        [InlineKeyboardButton(text="📊 Statistika", callback_data="admin_stats")],
     ])
 
 @router.message(Command("admin"))
@@ -336,24 +339,28 @@ async def broadcast_execute(message: Message, state: FSMContext, bot: Bot):
 async def admin_contest(callback: CallbackQuery):
     if not is_admin(callback.from_user.id):
         return
-    
+
     is_active = await db.get_contest_status()
     status_text = "🟢 Faol" if is_active else "🔴 To'xtatilgan"
-    
     toggle_text = "⏹ Konkursni to'xtatish" if is_active else "▶️ Konkursni boshlash"
     toggle_data = "stop_contest" if is_active else "start_contest"
-    
+
+    deadline_str = await db.get_deadline()
+    deadline_text = f"⏰ Muddat: {deadline_str[:16] if deadline_str else 'Belgilanmagan'}"
+
+    all_users = await db.get_all_users()
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=toggle_text, callback_data=toggle_data)],
+        [InlineKeyboardButton(text="⏰ Muddat belgilash", callback_data="set_deadline")],
         [InlineKeyboardButton(text="🏆 G'oliblarni e'lon qilish", callback_data="announce_winners")],
         [InlineKeyboardButton(text="🗑 Bazani tozalash (Reset)", callback_data="reset_contest")],
         [InlineKeyboardButton(text="« Orqaga", callback_data="back_admin")],
     ])
-    
-    all_users = await db.get_all_users()
+
     await callback.message.edit_text(
         f"🏆 <b>Konkurs boshqaruvi</b>\n\n"
         f"📊 Holat: {status_text}\n"
+        f"{deadline_text}\n"
         f"👥 Ishtirokchilar: {len(all_users)} ta",
         reply_markup=kb,
         parse_mode="HTML"
@@ -531,3 +538,92 @@ async def process_random_count(message: Message, state: FSMContext, bot: Bot):
             [InlineKeyboardButton(text="« Orqaga", callback_data="admin_contest")]
         ])
     )
+# ===== DEADLINE =====
+@router.callback_query(F.data == "set_deadline")
+async def set_deadline_start(callback: CallbackQuery, state: FSMContext):
+    if not is_admin(callback.from_user.id):
+        return
+    await callback.message.edit_text(
+        "⏰ <b>Konkurs muddatini belgilang</b>\n\n"
+        "Tugash vaqtini kiriting:\n"
+        "Format: <code>DD.MM.YYYY HH:MM</code>\n\n"
+        "Misol: <code>31.12.2025 23:59</code>\n\n"
+        "Bekor qilish: /cancel",
+        parse_mode="HTML"
+    )
+    await state.set_state(AdminStates.setting_deadline)
+    await callback.answer()
+
+
+@router.message(AdminStates.setting_deadline)
+async def process_deadline(message: Message, state: FSMContext):
+    if not is_admin(message.from_user.id):
+        return
+    try:
+        deadline = datetime.strptime(message.text.strip(), "%d.%m.%Y %H:%M")
+        if deadline <= datetime.now():
+            await message.answer("❌ Muddat o'tgan vaqt bo'lmasin! Qaytadan kiriting:")
+            return
+        await db.set_deadline(deadline.isoformat())
+        await state.clear()
+        await message.answer(
+            f"✅ <b>Muddat belgilandi!</b>\n\n"
+            f"⏰ Konkurs tugashi: <b>{deadline.strftime('%d.%m.%Y %H:%M')}</b>\n\n"
+            f"Muddat tugaganda bot avtomatik konkursni yakunlaydi va g'oliblarni e'lon qiladi.",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="« Admin panel", callback_data="back_admin")]
+            ])
+        )
+    except ValueError:
+        await message.answer(
+            "❌ Noto'g'ri format!\n\n"
+            "To'g'ri format: <code>DD.MM.YYYY HH:MM</code>\n"
+            "Misol: <code>31.12.2025 23:59</code>",
+            parse_mode="HTML"
+        )
+
+
+# ===== STATISTIKA =====
+@router.callback_query(F.data == "admin_stats")
+async def admin_stats(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        return
+
+    all_users = await db.get_all_users()
+    today_count = await db.get_today_users_count()
+    total_referrals = await db.get_total_referrals_count()
+    top_referrers = await db.get_top_referrers(5)
+    is_active = await db.get_contest_status()
+    deadline_str = await db.get_deadline()
+
+    lines = [
+        "📊 <b>Konkurs statistikasi</b>\n",
+        f"👥 Jami ishtirokchilar: <b>{len(all_users)}</b>",
+        f"🆕 Bugun qo'shilgan: <b>{today_count}</b>",
+        f"🔗 Jami referallar: <b>{total_referrals}</b>",
+        f"🏆 Konkurs holati: {'🟢 Faol' if is_active else '🔴 To\'xtatilgan'}",
+    ]
+
+    if deadline_str:
+        deadline = datetime.fromisoformat(deadline_str)
+        now = datetime.now()
+        diff = deadline - now
+        if diff.total_seconds() > 0:
+            days = diff.days
+            hours = diff.seconds // 3600
+            lines.append(f"⏰ Tugashiga: <b>{days} kun {hours} soat</b>")
+        else:
+            lines.append("⏰ Muddat: <b>Tugagan</b>")
+
+    if top_referrers:
+        lines.append("\n🔝 <b>Eng faol taklif qiluvchilar:</b>")
+        for i, u in enumerate(top_referrers, 1):
+            name = u["full_name"] or u["username"] or "Nomsiz"
+            lines.append(f"{i}. {name} — {u['ref_count']} referal ({u['points']} ball)")
+
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="« Orqaga", callback_data="back_admin")]
+    ])
+    await callback.message.edit_text("\n".join(lines), reply_markup=kb, parse_mode="HTML")
+    await callback.answer()
