@@ -19,6 +19,7 @@ class AdminStates(StatesGroup):
     editing_user_points = State()
     editing_user_id = State()
     broadcasting = State()
+    random_count = State()
 
 def is_admin(user_id: int) -> bool:
     return user_id in ADMIN_IDS
