@@ -461,7 +461,9 @@ async def cancel_state(message: Message, state: FSMContext):
         ]))
     else:
         await message.answer("Hech narsa bekor qilinmadi.")
-        @router.message(AdminStates.random_count)
+
+        
+@router.message(AdminStates.random_count)
 async def process_random_count(message: Message, state: FSMContext, bot: Bot):
     if not is_admin(message.from_user.id):
         return
