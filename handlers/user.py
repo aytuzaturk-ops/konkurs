@@ -85,9 +85,9 @@ async def cmd_start(message: Message, bot: Bot):
         return
 
     existing_user = await db.get_user(user_id)
-    if not existing_user:
+    is_new_user = existing_user is None
+    if is_new_user:
         await db.create_user(user_id, username, full_name, referrer_id)
-        existing_user = None
 
     contest_active = await db.get_contest_status()
     if not contest_active:
@@ -98,7 +98,7 @@ async def cmd_start(message: Message, bot: Bot):
         )
         return
 
-    await process_verified_user(message, bot, user_id, referrer_id, existing_user)
+    await process_verified_user(message, bot, user_id, referrer_id, None if is_new_user else existing_user)
 
 
 @router.callback_query(F.data == "check_subscription")
@@ -129,10 +129,11 @@ async def check_sub_callback(callback: CallbackQuery, bot: Bot):
         return
 
     existing_user = await db.get_user(user_id)
+    is_new_user = existing_user is None
     referrer_id = existing_user["referrer_id"] if existing_user else None
 
     await callback.message.delete()
-    await process_verified_user(callback.message, bot, user_id, referrer_id, existing_user, send_new=True)
+    await process_verified_user(callback.message, bot, user_id, referrer_id, None if is_new_user else existing_user, send_new=True)
     await callback.answer("✅ Tekshiruv muvaffaqiyatli!")
 
 
