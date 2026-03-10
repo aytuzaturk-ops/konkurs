@@ -261,9 +261,7 @@ async def top_100(callback: CallbackQuery):
         medal = medals.get(i, f"{i}.")
         # O'zini belgilash
         marker = " ◀️" if u["telegram_id"] == user_id else ""
-        # BALL KO'RSATISH - BU QATOR MUHIM!
-        lines.append(f"{medal} {name} — {u['points']} ball{marker}")
-
+        lines.append(f"{medal} {name} — {u['points']} ball{marker}")  # ← 4 ta indent bo'lishi kerak!
     if user_rank and user_rank > 100:
         lines.append(f"\n...\n🔸 Sizning o'rningiz: {user_rank}-o'rin")
 
