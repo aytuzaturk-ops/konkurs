@@ -36,7 +36,7 @@ def admin_only(func):
     return wrapper
 
 # ===== ADMIN PANEL =====
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton  # import qo'shing
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
 def admin_panel_kb():
     return ReplyKeyboardMarkup(
@@ -58,7 +58,6 @@ async def admin_panel(message: Message):
 @router.message(F.text == "📢 Kanallar")
 async def btn_channels(message: Message):
     if not is_admin(message.from_user.id): return
-    # admin_channels callback ni chaqirish o'rniga matn yuborish
     channels = await db.get_channels()
     text = "📢 <b>Kanallar boshqaruvi</b>\n\n"
     if channels:
@@ -121,12 +120,13 @@ async def btn_stats(message: Message):
     top_referrers = await db.get_top_referrers(5)
     is_active = await db.get_contest_status()
     deadline_str = await db.get_deadline()
+    status = "🟢 Faol" if is_active else "🔴 Toxtatilgan"
     lines = [
         "📊 <b>Konkurs statistikasi</b>\n",
         f"👥 Jami ishtirokchilar: <b>{len(all_users)}</b>",
         f"🆕 Bugun qo'shilgan: <b>{today_count}</b>",
         f"🔗 Jami referallar: <b>{total_referrals}</b>",
-        f"🏆 Holat: {'🟢 Faol' if is_active else '🔴 Toʻxtatilgan'}",
+        f"🏆 Holat: {status}",
     ]
     if deadline_str:
         deadline = datetime.fromisoformat(deadline_str)
@@ -153,7 +153,6 @@ async def admin_channels(callback: CallbackQuery):
     if not is_admin(callback.from_user.id):
         await callback.answer("❌ Ruxsat yo'q!", show_alert=True)
         return
-    
     channels = await db.get_channels()
     text = "📢 <b>Kanallar boshqaruvi</b>\n\n"
     if channels:
@@ -161,7 +160,6 @@ async def admin_channels(callback: CallbackQuery):
             text += f"• {ch['channel_name']} ({ch['channel_id']})\n"
     else:
         text += "Hozircha kanallar yo'q.\n"
-    
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="➕ Kanal qo'shish", callback_data="add_channel")],
         [InlineKeyboardButton(text="🗑 Kanal o'chirish", callback_data="remove_channel")],
@@ -207,7 +205,6 @@ async def add_channel_link(message: Message, state: FSMContext):
     link = message.text.strip()
     if not link.startswith("http"):
         link = "https://" + link
-    
     await db.add_channel(data["channel_id"], data["channel_name"], link)
     await state.clear()
     await message.answer(
@@ -229,7 +226,6 @@ async def remove_channel_start(callback: CallbackQuery, state: FSMContext):
     if not channels:
         await callback.answer("❌ O'chirish uchun kanallar yo'q!", show_alert=True)
         return
-    
     buttons = [[InlineKeyboardButton(text=f"🗑 {ch['channel_name']}", callback_data=f"del_ch_{ch['channel_id']}")] for ch in channels]
     buttons.append([InlineKeyboardButton(text="« Orqaga", callback_data="admin_channels")])
     await callback.message.edit_text("🗑 Qaysi kanalni o'chirmoqchisiz?", reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons))
@@ -282,15 +278,12 @@ async def list_all_users(callback: CallbackQuery):
     if not all_users:
         await callback.answer("Foydalanuvchilar yo'q!", show_alert=True)
         return
-    
     lines = ["👥 <b>Ishtirokchilar reytingi:</b>\n"]
     for i, u in enumerate(all_users[:50], 1):
         name = u["full_name"] or u["username"] or "Nomsiz"
         lines.append(f"{i}. {name} — {u['points']} ball (ID: {u['telegram_id']})")
-    
     if len(all_users) > 50:
         lines.append(f"\n... va yana {len(all_users) - 50} ta")
-    
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="« Orqaga", callback_data="admin_users")]
     ])
@@ -317,25 +310,21 @@ async def search_user_result(message: Message, state: FSMContext):
     except ValueError:
         await message.answer("❌ Noto'g'ri ID. Raqam kiriting:")
         return
-    
     user = await db.get_user(target_id)
     if not user:
         await message.answer("❌ Foydalanuvchi topilmadi!")
         await state.clear()
         return
-    
     referrals = await db.get_user_referrals(target_id)
     await state.clear()
-    
     text = (
         f"👤 <b>Foydalanuvchi ma'lumotlari:</b>\n\n"
         f"🆔 ID: <code>{user['telegram_id']}</code>\n"
         f"👤 Ism: {user['full_name'] or 'Nomsiz'}\n"
-        f"👑 Username: @{user['username']} or 'Yoq'\n"
+        f"👑 Username: @{user['username'] or 'Yoq'}\n"
         f"⭐ Ballar: <b>{user['points']}</b>\n"
         f"👥 Referal soni: <b>{len(referrals)}</b>\n"
     )
-    
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="✏️ Ballarni tahrirlash", callback_data=f"edit_points_{target_id}")],
         [InlineKeyboardButton(text="« Orqaga", callback_data="admin_users")],
@@ -364,12 +353,10 @@ async def edit_points_finish(message: Message, state: FSMContext):
     except ValueError:
         await message.answer("❌ Noto'g'ri qiymat. Raqam kiriting:")
         return
-    
     data = await state.get_data()
     target_id = data["editing_user_id"]
     await db.set_points(target_id, points)
     await state.clear()
-    
     await message.answer(
         f"✅ <b>Ballar yangilandi!</b>\n\nFoydalanuvchi ID: <code>{target_id}</code>\nYangi ballar: <b>{points}</b>",
         parse_mode="HTML",
@@ -396,28 +383,22 @@ async def broadcast_start(callback: CallbackQuery, state: FSMContext):
 async def broadcast_execute(message: Message, state: FSMContext, bot: Bot):
     if not is_admin(message.from_user.id):
         return
-    
     await state.clear()
     all_users = await db.get_all_users()
-    
     success = 0
     failed = 0
-    
     status_msg = await message.answer(f"📤 Xabar yuborilmoqda... 0/{len(all_users)}")
-    
     for i, user in enumerate(all_users):
         try:
             await message.copy_to(user["telegram_id"])
             success += 1
         except Exception:
             failed += 1
-        
         if (i + 1) % 20 == 0:
             try:
                 await status_msg.edit_text(f"📤 Xabar yuborilmoqda... {i+1}/{len(all_users)}")
             except Exception:
                 pass
-    
     await status_msg.edit_text(
         f"✅ <b>Xabar yuborish yakunlandi!</b>\n\n"
         f"✅ Muvaffaqiyatli: {success}\n"
@@ -434,15 +415,12 @@ async def broadcast_execute(message: Message, state: FSMContext, bot: Bot):
 async def admin_contest(callback: CallbackQuery):
     if not is_admin(callback.from_user.id):
         return
-
     is_active = await db.get_contest_status()
     status_text = "🟢 Faol" if is_active else "🔴 To'xtatilgan"
     toggle_text = "⏹ Konkursni to'xtatish" if is_active else "▶️ Konkursni boshlash"
     toggle_data = "stop_contest" if is_active else "start_contest"
-
     deadline_str = await db.get_deadline()
     deadline_text = f"⏰ Muddat: {deadline_str[:16] if deadline_str else 'Belgilanmagan'}"
-
     all_users = await db.get_all_users()
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=toggle_text, callback_data=toggle_data)],
@@ -451,7 +429,6 @@ async def admin_contest(callback: CallbackQuery):
         [InlineKeyboardButton(text="🗑 Bazani tozalash (Reset)", callback_data="reset_contest")],
         [InlineKeyboardButton(text="« Orqaga", callback_data="back_admin")],
     ])
-
     await callback.message.edit_text(
         f"🏆 <b>Konkurs boshqaruvi</b>\n\n"
         f"📊 Holat: {status_text}\n"
@@ -482,20 +459,15 @@ async def stop_contest(callback: CallbackQuery):
 async def announce_winners(callback: CallbackQuery, bot: Bot, state: FSMContext):
     if not is_admin(callback.from_user.id):
         return
-
     top_users = await db.get_top_users(100)
-
     if not top_users:
         await callback.answer("❌ Ishtirokchilar yo'q!", show_alert=True)
         return
-
     if len(top_users) < 3:
         await callback.answer("❌ Kamida 3 ta ishtirokchi kerak!", show_alert=True)
         return
-
     await state.update_data(top_users=[dict(u) for u in top_users])
     await state.set_state(AdminStates.random_count)
-
     await callback.message.edit_text(
         "🏆 <b>G'oliblarni aniqlash</b>\n\n"
         f"Jami ishtirokchilar: <b>{len(top_users)}</b>\n"
@@ -505,6 +477,7 @@ async def announce_winners(callback: CallbackQuery, bot: Bot, state: FSMContext)
         parse_mode="HTML"
     )
     await callback.answer()
+
 @router.callback_query(F.data == "reset_contest")
 async def reset_contest_confirm(callback: CallbackQuery):
     if not is_admin(callback.from_user.id):
@@ -545,14 +518,12 @@ async def confirm_reset(callback: CallbackQuery):
 async def back_admin(callback: CallbackQuery):
     if not is_admin(callback.from_user.id):
         return
-    
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📢 Kanallar", callback_data="admin_channels")],
         [InlineKeyboardButton(text="👥 Foydalanuvchilar", callback_data="admin_users")],
         [InlineKeyboardButton(text="🏆 Konkurs", callback_data="admin_contest")],
         [InlineKeyboardButton(text="📊 Statistika", callback_data="admin_stats")],
     ])
-    
     await callback.message.edit_text(
         "🛠 <b>Admin Panel</b>\n\nNimani boshqarmoqchisiz?",
         reply_markup=kb,
@@ -572,12 +543,10 @@ async def cancel_state(message: Message, state: FSMContext):
     else:
         await message.answer("Hech narsa bekor qilinmadi.")
 
-        
 @router.message(AdminStates.random_count)
 async def process_random_count(message: Message, state: FSMContext, bot: Bot):
     if not is_admin(message.from_user.id):
         return
-
     try:
         random_count = int(message.text.strip())
         if random_count < 1:
@@ -585,46 +554,30 @@ async def process_random_count(message: Message, state: FSMContext, bot: Bot):
     except ValueError:
         await message.answer("❌ Noto'g'ri son. Musbat raqam kiriting:")
         return
-
     data = await state.get_data()
     top_users = data["top_users"]
     await state.clear()
-
     import random
-
-    # 1, 2, 3 o'rinlar (kafolatlangan)
     first = top_users[0]
     second = top_users[1]
     third = top_users[2]
-
-    # Qolgan ishtirokchilar (4-o'rindan boshlab)
     rest = top_users[3:]
-
-    # Random tanlash
     if random_count > len(rest):
         random_count = len(rest)
-
     random_winners = random.sample(rest, random_count)
-
     medals = ["🥇", "🥈", "🥉"]
     lines = ["🏆 <b>KONKURS NATIJALARI</b> 🏆\n"]
     lines.append("━━━━━━━━━━━━━━━━━━━━━")
     lines.append("🎖 <b>KAFOLATLANGAN SOVG'ALAR:</b>\n")
-
     for i, u in enumerate([first, second, third]):
         name = u["full_name"] or u.get("username") or "Nomsiz"
         lines.append(f"{medals[i]} {i+1}-o'rin: <b>{name}</b> — {u['points']} ball")
-
     lines.append("\n━━━━━━━━━━━━━━━━━━━━━")
     lines.append(f"🎲 <b>RANDOM SOVG'ALAR ({random_count} ta):</b>\n")
-
     for i, u in enumerate(random_winners, 1):
         name = u["full_name"] or u.get("username") or "Nomsiz"
         lines.append(f"🎁 {i}-random: <b>{name}</b> — {u['points']} ball")
-
     announcement = "\n".join(lines)
-
-    # Barcha foydalanuvchilarga yuborish
     all_users = await db.get_all_users()
     sent = 0
     for user in all_users:
@@ -633,7 +586,6 @@ async def process_random_count(message: Message, state: FSMContext, bot: Bot):
             sent += 1
         except Exception:
             pass
-
     await message.answer(
         announcement + f"\n\n<i>📤 {sent} ta foydalanuvchiga yuborildi</i>",
         parse_mode="HTML",
@@ -641,6 +593,7 @@ async def process_random_count(message: Message, state: FSMContext, bot: Bot):
             [InlineKeyboardButton(text="« Orqaga", callback_data="admin_contest")]
         ])
     )
+
 # ===== DEADLINE =====
 @router.callback_query(F.data == "set_deadline")
 async def set_deadline_start(callback: CallbackQuery, state: FSMContext):
@@ -656,7 +609,6 @@ async def set_deadline_start(callback: CallbackQuery, state: FSMContext):
     )
     await state.set_state(AdminStates.setting_deadline)
     await callback.answer()
-
 
 @router.message(AdminStates.setting_deadline)
 async def process_deadline(message: Message, state: FSMContext):
@@ -686,7 +638,6 @@ async def process_deadline(message: Message, state: FSMContext):
             parse_mode="HTML"
         )
 
-
 # ===== STATISTIKA =====
 @router.callback_query(F.data == "admin_stats")
 async def admin_stats(callback: CallbackQuery):
@@ -700,7 +651,7 @@ async def admin_stats(callback: CallbackQuery):
     is_active = await db.get_contest_status()
     deadline_str = await db.get_deadline()
 
-  status = '🟢 Faol' if is_active else '🔴 Toxtatilgan'
+    status = "🟢 Faol" if is_active else "🔴 Toxtatilgan"
     lines = [
         "📊 <b>Konkurs statistikasi</b>\n",
         f"👥 Jami ishtirokchilar: <b>{len(all_users)}</b>",
