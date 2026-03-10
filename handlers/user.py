@@ -255,14 +255,11 @@ async def top_100(callback: CallbackQuery):
 
     for i, u in enumerate(top_users, 1):
         name = u["full_name"] or u["username"] or "Nomsiz"
-        # Ismni 20 ta belgiga cheklash
         if len(name) > 20:
             name = name[:18] + ".."
         medal = medals.get(i, f"{i}.")
-        # O'zini belgilash
         marker = " ◀️" if u["telegram_id"] == user_id else ""
-        # BALL KO'RSATISH - BU QATOR MUHIM!
-        lines.append(f"{medal} {name} — {u['points']} ball{marker}")
+        lines.append(f"{medal} {name} — {u['points']} ball{marker}")  # ← Bu qator BORMIKAN?
 
     if user_rank and user_rank > 100:
         lines.append(f"\n...\n🔸 Sizning o'rningiz: {user_rank}-o'rin")
@@ -279,6 +276,7 @@ async def top_100(callback: CallbackQuery):
     except Exception:
         await callback.message.answer(text, reply_markup=kb, parse_mode="HTML")
     await callback.answer()
+
 
 @router.callback_query(F.data == "back_main")
 async def back_main(callback: CallbackQuery, bot: Bot):
