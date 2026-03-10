@@ -246,7 +246,7 @@ async def my_referrals(callback: CallbackQuery):
 @router.callback_query(F.data == "top_100")
 async def top_100(callback: CallbackQuery):
     user_id = callback.from_user.id
-    top_users = await db.get_top_users(100)
+    top_users = [u for u in await db.get_top_users(100) if u["points"] > 0]
     all_users = await db.get_all_users()
     user_rank = next((i + 1 for i, u in enumerate(all_users) if u["telegram_id"] == user_id), None)
 
