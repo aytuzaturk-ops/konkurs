@@ -700,13 +700,14 @@ async def admin_stats(callback: CallbackQuery):
     is_active = await db.get_contest_status()
     deadline_str = await db.get_deadline()
 
-   lines = [
-    "📊 <b>Konkurs statistikasi</b>\n",
-    f"👥 Jami ishtirokchilar: <b>{len(all_users)}</b>",
-    f"📅 Bugun qo'shilgan: <b>{today_count}</b>",
-    f"🔗 Jami referallar: <b>{total_referrals}</b>",
-    f"🏆 Konkurs holati: {status}",
-        ]
+  status = '🟢 Faol' if is_active else '🔴 Toxtatilgan'
+    lines = [
+        "📊 <b>Konkurs statistikasi</b>\n",
+        f"👥 Jami ishtirokchilar: <b>{len(all_users)}</b>",
+        f"📅 Bugun qo'shilgan: <b>{today_count}</b>",
+        f"🔗 Jami referallar: <b>{total_referrals}</b>",
+        f"🏆 Konkurs holati: {status}",
+    ]
 
     if deadline_str:
         deadline = datetime.fromisoformat(deadline_str)
