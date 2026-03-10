@@ -153,7 +153,6 @@ async def process_verified_user(message, bot: Bot, user_id: int, referrer_id, ex
         except Exception:
             pass
 
-    # Deadline ma'lumoti
     deadline_str = await db.get_deadline()
     deadline_text = ""
     if deadline_str:
@@ -251,7 +250,7 @@ async def top_100(callback: CallbackQuery):
     user_rank = next((i + 1 for i, u in enumerate(all_users) if u["telegram_id"] == user_id), None)
 
     medals = {1: "🥇", 2: "🥈", 3: "🥉"}
-   lines = [f"🏆 <b>Top {min(100, len(top_users))} Reyting</b>\n"]
+    lines = [f"🏆 <b>Top {min(100, len(top_users))} Reyting</b>\n"]
 
     for i, u in enumerate(top_users, 1):
         name = u["full_name"] or u["username"] or "Nomsiz"
@@ -259,7 +258,7 @@ async def top_100(callback: CallbackQuery):
             name = name[:18] + ".."
         medal = medals.get(i, f"{i}.")
         marker = " ◀️" if u["telegram_id"] == user_id else ""
-        lines.append(f"{medal} {name} — {u['points']} ball{marker}")  # ← Bu qator BORMIKAN?
+        lines.append(f"{medal} {name} — {u['points']} ball{marker}")
 
     if user_rank and user_rank > 100:
         lines.append(f"\n...\n🔸 Sizning o'rningiz: {user_rank}-o'rin")
@@ -270,7 +269,6 @@ async def top_100(callback: CallbackQuery):
         [InlineKeyboardButton(text="« Orqaga", callback_data="back_main")]
     ])
 
-    # Xabar uzun bo'lishi mumkin, edit_text ishlamasligi mumkin
     try:
         await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
     except Exception:
