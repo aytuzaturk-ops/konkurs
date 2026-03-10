@@ -246,59 +246,40 @@ async def my_referrals(callback: CallbackQuery):
 @router.callback_query(F.data == "top_100")
 async def top_100(callback: CallbackQuery):
     user_id = callback.from_user.id
-    
-    # Database dan ma'lumot olish
     top_users = await db.get_top_users(100)
     all_users = await db.get_all_users()
     user_rank = next((i + 1 for i, u in enumerate(all_users) if u["telegram_id"] == user_id), None)
-    
-    # Sarlavha
-    lines = [f"🏆 <b>Top {min(100, len(top_users))} Reyting</b>\n"]
-    
-    # Medallar
+
     medals = {1: "🥇", 2: "🥈", 3: "🥉"}
-    
-    # HAR BIR USER UCHUN
+    lines = [f"🏆 <b>Top {min(100, len(top_users))} Reyting</b>\n"]
+
     for i, u in enumerate(top_users, 1):
-        # Ism
         name = u["full_name"] or u["username"] or "Nomsiz"
+        # Ismni 20 ta belgiga cheklash
         if len(name) > 20:
             name = name[:18] + ".."
-        
-        # Medal yoki raqam
         medal = medals.get(i, f"{i}.")
-        
         # O'zini belgilash
-        if u["telegram_id"] == user_id:
-            marker = " ◀️"
-        else:
-            marker = ""
-        
-        # BALL BILAN QO'SHISH - BU YERDA!
-        points = u["points"]
-        line = f"{medal} {name} — {points} ball{marker}"
-        lines.append(line)
-    
-    # Agar 100 dan keyin bo'lsa
+        marker = " ◀️" if u["telegram_id"] == user_id else ""
+        # BALL KO'RSATISH - BU QATOR MUHIM!
+        lines.append(f"{medal} {name} — {u['points']} ball{marker}")
+
     if user_rank and user_rank > 100:
         lines.append(f"\n...\n🔸 Sizning o'rningiz: {user_rank}-o'rin")
-    
-    # Birlashtiramiz
+
     text = "\n".join(lines)
-    
-    # Tugma
+
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="« Orqaga", callback_data="back_main")]
     ])
-    
-    # Yuboramiz
+
+    # Xabar uzun bo'lishi mumkin, edit_text ishlamasligi mumkin
     try:
         await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
     except Exception:
         await callback.message.answer(text, reply_markup=kb, parse_mode="HTML")
-    
     await callback.answer()
-    
+
 @router.callback_query(F.data == "back_main")
 async def back_main(callback: CallbackQuery, bot: Bot):
     user_id = callback.from_user.id
