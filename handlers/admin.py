@@ -331,7 +331,7 @@ async def search_user_result(message: Message, state: FSMContext):
         f"👤 <b>Foydalanuvchi ma'lumotlari:</b>\n\n"
         f"🆔 ID: <code>{user['telegram_id']}</code>\n"
         f"👤 Ism: {user['full_name'] or 'Nomsiz'}\n"
-        f"📛 Username: @{user['username'] or 'Yo\'q'}\n"
+        f"👑 Username: @{user['username']} or 'Yoq'\n"
         f"⭐ Ballar: <b>{user['points']}</b>\n"
         f"👥 Referal soni: <b>{len(referrals)}</b>\n"
     )
