@@ -705,8 +705,8 @@ async def admin_stats(callback: CallbackQuery):
         f"👥 Jami ishtirokchilar: <b>{len(all_users)}</b>",
         f"🆕 Bugun qo'shilgan: <b>{today_count}</b>",
         f"🔗 Jami referallar: <b>{total_referrals}</b>",
-        f"🏆 Konkurs holati: {'🟢 Faol' if is_active else '🔴 To\'xtatilgan'}",
-    ]
+        status = '🟢 Faol' if is_active else '🔴 Toxtatilgan'
+f"🏆 Konkurs holati: {status}"
 
     if deadline_str:
         deadline = datetime.fromisoformat(deadline_str)
